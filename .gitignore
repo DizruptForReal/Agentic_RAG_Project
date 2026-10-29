@@ -1,0 +1,27 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Runtime data (SQLite database, uploads, Elasticsearch data, evaluation reports)
+data/
+
+# Environments and caches
+.venv/
+venv/
+.hf-cache/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.part
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+~$*
+
+# Local run outputs
+demo_*.txt
+*.log

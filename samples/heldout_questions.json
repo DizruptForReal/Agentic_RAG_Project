@@ -1,0 +1,53 @@
+{
+  "_comment": "Held-out evaluation set. Written systematically per document section and question type, NOT from observed failures, and never used to tune thresholds or wording. 'expect' = acceptable (document title fragment, section prefix) pairs for retrieval; 'outcome' = answer | refuse for the end-to-end run; 'must_contain' = facts a correct answer has to state (case-insensitive, any one of each list item's alternatives separated by '|').",
+  "questions": [
+    {"cat": "lookup", "q": "What is the rated pressure of the X200?", "expect": [["X200 Service Manual", "1. Specifications"]], "outcome": "answer", "must_contain": ["10 bar"]},
+    {"cat": "lookup", "q": "How heavy is the X300 pump?", "expect": [["X300 Service Manual", "1. Specifications"]], "outcome": "answer", "must_contain": ["7 kg"]},
+    {"cat": "lookup", "q": "What voltage does the X200 motor run on?", "expect": [["X200 Service Manual", "1. Specifications"]], "outcome": "answer", "must_contain": ["400"]},
+    {"cat": "lookup", "q": "What is the maximum fluid temperature for the X300?", "expect": [["X300 Service Manual", "1. Specifications"]], "outcome": "answer", "must_contain": ["95"]},
+    {"cat": "lookup", "q": "How much is the monthly rental in the Acme lease?", "expect": [["Acme Facilities", "3. Payments"]], "outcome": "answer", "must_contain": ["310"]},
+    {"cat": "lookup", "q": "How long does the Acme lease run?", "expect": [["Acme Facilities", "2. Term"]], "outcome": "answer", "must_contain": ["36"]},
+    {"cat": "lookup", "q": "What does error E05 indicate on the X200?", "expect": [["X200 Service Manual", "6. Error codes"]], "outcome": "answer", "must_contain": ["phase"]},
+    {"cat": "lookup", "q": "After how many operating hours should the X200 bearings be regreased?", "expect": [["X200 Service Manual", "4. Maintenance schedule"], ["X200 Service Manual", "1. Specifications"]], "outcome": "answer", "must_contain": ["4,000|4000"]},
+    {"cat": "lookup", "q": "What is the highest glycol concentration that may be used?", "expect": [["X200 Service Manual", "3. Approved fluids"], ["Limited Warranty Policy", "4. Exclusions"]], "outcome": "answer", "must_contain": ["30"]},
+    {"cat": "lookup", "q": "When did the warranty amendment take effect?", "expect": [["Amendment", "Warranty Policy Amendment"], ["Amendment", "6. Sections not changed"]], "outcome": "answer", "must_contain": ["2025"]},
+
+    {"cat": "procedure", "q": "What steps should I follow to submit a warranty claim?", "expect": [["Limited Warranty Policy", "7. Claims procedure"]], "outcome": "answer", "must_contain": ["serial"]},
+    {"cat": "procedure", "q": "What documents do I need to include with a claim?", "expect": [["Limited Warranty Policy", "7. Claims procedure"], ["Limited Warranty Policy", "6. Proof of purchase"]], "outcome": "answer", "must_contain": ["receipt"]},
+    {"cat": "procedure", "q": "How can I challenge a rejected warranty claim?", "expect": [["Limited Warranty Policy", "8. Disputes"]], "outcome": "answer", "must_contain": ["review|independent"]},
+    {"cat": "procedure", "q": "What is required when installing an X200?", "expect": [["X200 Service Manual", "2. Installation requirements"], ["Limited Warranty Policy", "5. Conditions"]], "outcome": "answer", "must_contain": ["certified"]},
+    {"cat": "procedure", "q": "What maintenance does the X300 need?", "expect": [["X300 Service Manual", "8. Maintenance"]], "outcome": "answer", "must_contain": ["year|annual"]},
+    {"cat": "procedure", "q": "How do I register my pump, and is it mandatory?", "expect": [["Limited Warranty Policy", "5. Conditions"]], "outcome": "answer", "must_contain": ["30"]},
+
+    {"cat": "yes_no", "q": "Is damage from a lightning strike covered?", "expect": [["Limited Warranty Policy", "4. Exclusions"]], "outcome": "answer", "must_contain": ["not|no"]},
+    {"cat": "yes_no", "q": "Are mechanical seals still covered after the first year?", "expect": [["Limited Warranty Policy", "3. What is covered"]], "outcome": "answer", "must_contain": ["6 months|six (6) months|six months"]},
+    {"cat": "yes_no", "q": "Can a regular plumber install a residential X300?", "expect": [["Limited Warranty Policy", "5. Conditions"]], "outcome": "answer", "must_contain": ["plumber"]},
+    {"cat": "yes_no", "q": "Does the warranty pay for water damage to my building?", "expect": [["Limited Warranty Policy", "4. Exclusions"]], "outcome": "answer", "must_contain": ["not|no"]},
+    {"cat": "yes_no", "q": "Is limescale in an X300 treated as a failure?", "expect": [["X300 Service Manual", "7. Failure versus normal wear"]], "outcome": "answer", "must_contain": ["not|no"]},
+    {"cat": "yes_no", "q": "Does Aquaflow pay for return shipping on a repair?", "expect": [["Limited Warranty Policy", "3. What is covered"]], "outcome": "answer", "must_contain": ["shipping"]},
+    {"cat": "yes_no", "q": "Can an X300 used in an office get Extended Care?", "expect": [["X300 Service Manual", "9. Warranty"]], "outcome": "answer", "must_contain": ["commercial"]},
+    {"cat": "yes_no", "q": "Do I lose the warranty if I never register the pump?", "expect": [["Limited Warranty Policy", "5. Conditions"]], "outcome": "answer", "must_contain": ["still covered|still|prove"]},
+
+    {"cat": "casual", "q": "my pump broke, how many days do i have to report it?", "expect": [["Limited Warranty Policy", "7. Claims procedure"], ["Limited Warranty Policy", "12. Key time limits"]], "outcome": "answer", "must_contain": ["30"]},
+    {"cat": "casual", "q": "who pays if an engineer has to come out to my site", "expect": [["Limited Warranty Policy", "3. What is covered"]], "outcome": "answer", "must_contain": ["25 kg|call-out|call out"]},
+    {"cat": "casual", "q": "pump shows E01 and makes noise, what does that mean", "expect": [["X200 Service Manual", "6. Error codes"]], "outcome": "answer", "must_contain": ["dry run"]},
+    {"cat": "casual", "q": "can i sell my pump and keep the guarantee", "expect": [["Limited Warranty Policy", "9. Transfer of warranty"]], "outcome": "answer", "must_contain": ["once|transfer"]},
+    {"cat": "casual", "q": "whats the most aquaflow will ever pay out under the warranty", "expect": [["Limited Warranty Policy", "10. Limitation of liability"]], "outcome": "answer", "must_contain": ["purchase price"]},
+    {"cat": "casual", "q": "does the guarantee cover the control box", "expect": [["Limited Warranty Policy", "3. What is covered"]], "outcome": "answer", "must_contain": ["control panel"]},
+
+    {"cat": "cross_doc", "q": "Who decides whether a pump counts as commercial or residential?", "expect": [["Amendment", "3. Usage classification"]], "outcome": "answer", "must_contain": ["contract|lease"]},
+    {"cat": "cross_doc", "q": "How long is labour covered on a commercial X200 bought in March 2025?", "expect": [["Amendment", "4. Labour costs"], ["Amendment", "7. Summary"]], "outcome": "answer", "must_contain": ["6 months|six (6) months|six months"]},
+    {"cat": "cross_doc", "q": "Which pumps must be installed by a certified installer?", "expect": [["Limited Warranty Policy", "5. Conditions"], ["X200 Service Manual", "2. Installation requirements"]], "outcome": "answer", "must_contain": ["X200"]},
+    {"cat": "cross_doc", "q": "Where does the purchase date for a warranty claim come from?", "expect": [["Limited Warranty Policy", "6. Proof of purchase"], ["Limited Warranty Policy", "11. Definitions"], ["X200 Service Manual", "7. Warranty"]], "outcome": "answer", "must_contain": ["receipt"]},
+
+    {"cat": "version", "q": "Is the Aquaflow warranty 12 months or 24 months?", "expect": [["Amendment", "1. Commercial-use units"], ["Amendment", "7. Summary"], ["Limited Warranty Policy", "2. Warranty period"], ["Amendment", "2. Residential-use units"]], "outcome": "answer", "must_contain": ["12", "24"]},
+    {"cat": "version", "q": "Which parts of the original policy did the amendment change?", "expect": [["Amendment", "Warranty Policy Amendment"], ["Amendment", "6. Sections not changed"]], "outcome": "answer", "must_contain": ["section 2|Section 2"]},
+    {"cat": "version", "q": "Does a pump bought in 2024 fall under the amendment?", "expect": [["Amendment", "Warranty Policy Amendment"], ["Amendment", "6. Sections not changed"], ["Amendment", "7. Summary"]], "outcome": "answer", "must_contain": ["no|not|before"]},
+
+    {"cat": "out_of_scope", "q": "What is the warranty on the Aquaflow X900?", "expect": [], "outcome": "refuse", "must_contain": []},
+    {"cat": "out_of_scope", "q": "How do I install solar panels on my roof?", "expect": [], "outcome": "refuse", "must_contain": []},
+    {"cat": "out_of_scope", "q": "Who is the CEO of Aquaflow?", "expect": [], "outcome": "refuse", "must_contain": []},
+    {"cat": "out_of_scope", "q": "What will the weather be in Leeds tomorrow?", "expect": [], "outcome": "refuse", "must_contain": []},
+    {"cat": "out_of_scope", "q": "What is the retail price of a new X200?", "expect": [], "outcome": "refuse", "must_contain": []}
+  ]
+}

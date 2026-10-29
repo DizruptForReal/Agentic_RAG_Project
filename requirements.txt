@@ -1,0 +1,17 @@
+# Runtime
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+python-multipart>=0.0.9,<1
+pydantic>=2.7,<3
+pydantic-settings>=2.3,<3
+httpx>=0.27,<1
+elasticsearch>=8.13,<9            # matches the Elasticsearch 8.x server in docker-compose.yml
+sentence-transformers>=3.0,<6     # BGE embedder and reranker (pulls in PyTorch)
+pymupdf>=1.24,<3                  # PDF text layer and page rendering
+pytesseract>=0.3.10,<0.4          # needs the Tesseract binary installed separately
+pillow>=10.3,<13
+anthropic>=0.40                   # optional provider (LLM_PROVIDER=anthropic)
+# Sample generation (samples/make_samples.py, make_test_uploads.py)
+reportlab>=4.2,<6
+# Tests
+pytest>=8.2,<10

@@ -1,0 +1,6 @@
+# Normalise line endings; keep binaries untouched
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.pdf binary
+*.png binary
+*.xlsx binary

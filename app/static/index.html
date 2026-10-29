@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evidence Investigator</title>
+<style>
+:root {
+  --bg: #f6f5f1; --panel: #ffffff; --ink: #1d1f23; --muted: #6b6f76; --line: #e3e1da;
+  --accent: #2f5d8a; --accent-ink: #ffffff; --soft: #eef2f6;
+  --ok: #1f7a4d; --ok-bg: #e5f4ec; --warn: #9a5b00; --warn-bg: #fdf1dc;
+  --bad: #a1312a; --bad-bg: #fbe7e5; --info: #2f5d8a; --info-bg: #e6eef7;
+  --llm: #6a4c93; --llm-bg: #efe9f7;
+  --hl: #fff1a8; --lowconf: #f6c9c4;
+  --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171a; --panel: #1d2024; --ink: #e8e6e1; --muted: #9a9ea6; --line: #2d3137;
+    --accent: #7fb0e0; --accent-ink: #0f1215; --soft: #232830;
+    --ok: #6fd3a0; --ok-bg: #173226; --warn: #f0b660; --warn-bg: #352812;
+    --bad: #f08b83; --bad-bg: #3a1c1a; --info: #8fbbe6; --info-bg: #1b2a3a;
+    --llm: #c3a6ea; --llm-bg: #2b2238;
+    --hl: #5a4d12; --lowconf: #5c2723;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); }
+header { display: flex; align-items: baseline; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+header h1 { font-size: 17px; margin: 0; letter-spacing: .2px; cursor: pointer; }
+header .sub { color: var(--muted); font-size: 13px; }
+header .health { margin-left: auto; font-size: 12px; color: var(--muted); }
+.layout { display: grid; grid-template-columns: 290px 1fr; min-height: calc(100vh - 52px); }
+aside { border-right: 1px solid var(--line); padding: 16px; background: var(--panel); overflow-y: auto; }
+main { padding: 28px 32px 80px; overflow-y: auto; min-width: 0; }
+.wrap { max-width: 980px; margin: 0 auto; }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 18px 0 8px; }
+aside h2:first-child { margin-top: 0; }
+button { font: inherit; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); border-radius: 8px; padding: 8px 16px; cursor: pointer; }
+button.ghost { background: transparent; color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+input[type=text] { width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+/* composer */
+.composer { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.composer h2 { margin-top: 0; }
+.composer textarea { width: 100%; border: none; outline: none; resize: vertical; min-height: 64px; font: 17px/1.5 var(--sans); color: var(--ink); background: transparent; }
+.composer .bar { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 8px; flex-wrap: wrap; }
+.attach { font-size: 13px; color: var(--muted); cursor: pointer; border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; }
+.attach input { display: none; }
+.bar .spacer { flex: 1; }
+.examples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 4px 11px; cursor: pointer; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.hint { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
+/* lists */
+.list { list-style: none; margin: 0; padding: 0; }
+.list li { padding: 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+.list li:hover { background: var(--soft); }
+.list li.active { border-color: var(--accent); background: var(--soft); }
+.list .q { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.list .meta, .meta { font-size: 11.5px; color: var(--muted); }
+.doc-li { font-size: 12.5px; }
+.badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; white-space: nowrap; }
+.b-ok { color: var(--ok); background: var(--ok-bg); } .b-warn { color: var(--warn); background: var(--warn-bg); }
+.b-bad { color: var(--bad); background: var(--bad-bg); } .b-info { color: var(--info); background: var(--info-bg); }
+.b-mute { color: var(--muted); background: var(--soft); } .b-llm { color: var(--llm); background: var(--llm-bg); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-top: 16px; }
+.question { font-size: 18px; font-weight: 600; margin: 0 0 8px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.answer { white-space: pre-wrap; font-size: 15px; }
+.cite { color: var(--accent); background: var(--info-bg); border-radius: 4px; padding: 0 4px; cursor: pointer; font-family: var(--mono); font-size: 12px; }
+.cite:hover { text-decoration: underline; }
+.answer .mdtable { margin: 10px 0; white-space: normal; }
+.answer .mdtable th, .answer .mdtable td { border: 1px solid var(--line); }
+.answer .mdtable th { background: var(--soft); color: var(--ink); }
+/* activity */
+.now { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: var(--soft); margin-bottom: 12px; font-size: 14px; }
+.now .elapsed { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline li { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; padding: 7px 0; border-bottom: 1px dashed var(--line); align-items: start; }
+.timeline li:last-child { border-bottom: none; }
+.timeline .dot { width: 10px; height: 10px; border-radius: 50%; margin: 6px 0 0 5px; background: var(--line); }
+.dot.OK { background: var(--ok); } .dot.ERROR { background: var(--bad); } .dot.BLOCKED, .dot.EMPTY { background: var(--warn); }
+.dot.PAUSED { background: var(--info); } .dot.PLAN { background: var(--llm); }
+.timeline .what { font-size: 13.5px; }
+.timeline .detail { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.timeline .dur { font-family: var(--mono); font-size: 11.5px; color: var(--muted); text-align: right; white-space: nowrap; }
+.timeline .note { font-size: 12px; color: var(--warn); }
+.summary { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.summary b { color: var(--ink); font-weight: 600; }
+details > summary { cursor: pointer; list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary .chev { display: inline-block; transition: transform .15s; }
+details[open] > summary .chev { transform: rotate(90deg); }
+/* tabs + tables */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-top: 22px; }
+.tabs button { background: none; color: var(--muted); border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 12px; }
+.tabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.cites { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.citecard { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; background: var(--panel); }
+.citecard:hover { border-color: var(--accent); }
+.citecard .ex { font-size: 12.5px; color: var(--muted); margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.pending { border-color: var(--info); }
+ul.plain { margin: 6px 0 0; padding-left: 18px; }
+.spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.err { color: var(--bad); font-size: 13px; margin-top: 6px; }
+.empty { color: var(--muted); padding: 24px 0; text-align: center; }
+/* source viewer */
+.drawer { position: fixed; inset: 0 0 0 auto; width: min(760px, 100vw); background: var(--panel); border-left: 1px solid var(--line); box-shadow: -8px 0 30px rgba(0,0,0,.18); transform: translateX(105%); transition: transform .2s; display: flex; flex-direction: column; z-index: 10; }
+.drawer.open { transform: none; }
+.drawer .top { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.drawer .body { padding: 14px 18px; overflow-y: auto; flex: 1; }
+.drawer .close { float: right; }
+.cited { background: var(--soft); border-radius: 6px; padding: 10px 12px; white-space: pre-wrap; font-size: 13px; }
+.pagetext { white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; line-height: 1.65; border: 1px solid var(--line); border-radius: 6px; padding: 12px; background: var(--bg); }
+.pagetext .hl { background: var(--hl); }
+.pagetext .low { background: var(--lowconf); border-bottom: 2px dotted var(--bad); }
+.legend { font-size: 12px; color: var(--muted); margin: 8px 0; }
+.legend span { padding: 0 4px; border-radius: 3px; }
+iframe, .imgview { width: 100%; height: 70vh; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.imgview { height: auto; }
+@media (max-width: 860px) { header { flex-wrap: wrap; } header .sub { display: none; } header .health { margin-left: 0; width: 100%; } .now { flex-wrap: wrap; } .layout { grid-template-columns: 1fr; } aside { order: 2; border-right: none; border-top: 1px solid var(--line); } main { padding: 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="home">Evidence Investigator</h1>
+  <span class="sub">ask a question, watch the investigation, verify every source</span>
+  <span class="health" id="health"></span>
+</header>
+<div class="layout">
+  <aside>
+    <h2>History</h2>
+    <ul class="list" id="history"></ul>
+    <h2>Knowledge base</h2>
+    <ul class="list" id="docs"></ul>
+  </aside>
+  <main><div class="wrap">
+    <form class="composer" id="newForm">
+      <h2>Ask a question</h2>
+      <textarea id="newQ" placeholder="e.g. What all is covered under the Aquaflow warranty?"></textarea>
+      <div class="bar">
+        <label class="attach" title="Optional: attach a document from the start"><input type="file" id="newFile"><span id="fileLabel">+ Attach a document</span></label>
+        <span class="spacer"></span>
+        <span class="err" id="newErr"></span>
+        <button type="submit" id="newBtn">Investigate</button>
+      </div>
+      <div class="examples" id="examples"></div>
+    </form>
+    <div id="main"></div>
+  </div></main>
+</div>
+
+<div class="drawer" id="drawer">
+  <div class="top"><button class="ghost close" id="drawerClose">Close</button><div id="drawerTitle"></div></div>
+  <div class="body" id="drawerBody"></div>
+</div>
+<script>
+const EXAMPLES = [
+  "What all is covered under the warranty?",
+  "What does the warranty not cover?",
+  "How do I make a warranty claim, and how long does it take?",
+  "Is the motor seizure of Acme Facilities' Aquaflow X200 pump (serial AQ-X200-55871) on 14 March 2026 covered under warranty?",
+  "What is the warranty period for the Aquaflow X500?",
+];
+const $ = (id) => document.getElementById(id);
+let current = null, pollTimer = null, tab = "answer", tick = null, PRIMARY = null;
+const uploads = {};   // investigation id -> upload results this session (dedupe / OCR info from the API)
+function noteUpload(inv) { if (inv && inv.upload) (uploads[inv.id] = uploads[inv.id] || []).push(inv.upload); }
+
+function el(tag, attrs = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") n.className = v; else if (k === "onclick") n.onclick = v; else if (k === "text") n.textContent = v;
+    else n.setAttribute(k, v);
+  }
+  for (const k of kids.flat()) if (k != null && k !== false) n.append(k.nodeType ? k : document.createTextNode(String(k)));
+  return n;
+}
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) { let d = await r.text(); try { d = JSON.parse(d).detail || d; } catch {} throw new Error(typeof d === "string" ? d : JSON.stringify(d)); }
+  return r.json();
+}
+const BADGE = {
+  ANSWERED: "b-ok", ANSWERED_WITH_CAVEATS: "b-warn", MISSING_INFO: "b-info", INSUFFICIENT_EVIDENCE: "b-warn",
+  CONFLICT: "b-bad", TOOL_FAILURE: "b-bad", COMPLETED: "b-mute", RUNNING: "b-info", CREATED: "b-info",
+  NEEDS_INPUT: "b-info", INTERRUPTED: "b-warn", FAILED: "b-bad",
+  SUPPORTED: "b-ok", MISSING: "b-info", CONFLICTING: "b-bad", UNVERIFIED: "b-warn", INSUFFICIENT: "b-warn", OPEN: "b-mute",
+  VERIFIED: "b-ok", USER_STATED: "b-info", DUPLICATE: "b-warn", RECEIVED: "b-mute", TRIAGED: "b-mute", OK: "b-ok", EMPTY: "b-warn", ERROR: "b-bad", BLOCKED: "b-warn", PAUSED: "b-info", INDEXED: "b-ok", EXTRACTED: "b-mute",
+};
+const badge = (s) => el("span", { class: "badge " + (BADGE[s] || "b-mute"), text: (s || "").replaceAll("_", " ") });
+const busy = (s) => s === "RUNNING" || s === "CREATED";
+const secs = (ms) => ms == null ? "" : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
+
+// ------------------------------------------------------------------ sidebar
+async function loadHistory() {
+  try {
+    const items = await api("/investigations?limit=30");
+    $("history").replaceChildren(...items.map((i) => el("li", { class: current && current.id === i.id ? "active" : "", onclick: () => openInv(i.id) },
+      el("div", { class: "q", text: i.question }),
+      el("div", { class: "meta" }, badge(i.outcome || i.status), " ", new Date(i.updated_at).toLocaleString()))));
+    if (!items.length) $("history").replaceChildren(el("li", { class: "meta", text: "No investigations yet." }));
+  } catch (e) { $("history").replaceChildren(el("li", { class: "err", text: e.message })); }
+}
+async function loadDocs() {
+  try {
+    const docs = await api("/documents");
+    $("docs").replaceChildren(...docs.map((d) => el("li", { class: "doc-li", onclick: () => openSource({ doc_id: d.doc_id, doc_name: d.title || d.filename }) },
+      el("div", { text: d.title || d.filename }),
+      el("div", { class: "meta" }, badge(d.status), " ", d.doc_type || "", d.scope !== "global" ? " · session upload" : ""))));
+  } catch (e) { $("docs").replaceChildren(el("li", { class: "err", text: e.message })); }
+}
+async function loadHealth() {
+  try { const h = await api("/health"); PRIMARY = h.llm_model; $("health").textContent = `LLM: ${h.llm_model} · Elasticsearch: ${h.elasticsearch.ok ? h.elasticsearch.chunks + " chunks" : "DOWN"}`; }
+  catch { $("health").textContent = "API not reachable"; }
+}
+
+// ------------------------------------------------------------------ composer
+$("examples").replaceChildren(...EXAMPLES.map((q) => el("button", { type: "button", class: "chip", text: q.length > 70 ? q.slice(0, 68) + "…" : q, title: q, onclick: () => { $("newQ").value = q; $("newQ").focus(); } })));
+$("newFile").onchange = () => { $("fileLabel").textContent = $("newFile").files[0] ? "📎 " + $("newFile").files[0].name : "+ Attach a document"; };
+$("newQ").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("newForm").requestSubmit(); });
+$("home").onclick = () => { current = null; clearTimeout(pollTimer); $("main").replaceChildren(); $("newQ").focus(); loadHistory(); };
+$("newForm").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const q = $("newQ").value.trim();
+  if (q.length < 5) { $("newErr").textContent = "Type a question first."; return; }
+  const fd = new FormData(); fd.append("question", q); fd.append("wait", "false");
+  if ($("newFile").files[0]) fd.append("file", $("newFile").files[0]);
+  $("newBtn").disabled = true; $("newErr").textContent = "";
+  try {
+    const inv = await api("/investigations", { method: "POST", body: fd });
+    noteUpload(inv);
+    $("newQ").value = ""; $("newFile").value = ""; $("fileLabel").textContent = "+ Attach a document";
+    tab = "answer"; show(inv); poll(); loadHistory();
+  } catch (e) { $("newErr").textContent = e.message; }
+  finally { $("newBtn").disabled = false; }
+};
+
+// ------------------------------------------------------------------ investigation
+async function openInv(id) { try { tab = "answer"; show(await api(`/investigations/${id}`)); poll(); } catch (e) { alert(e.message); } }
+function poll() {
+  clearTimeout(pollTimer);
+  if (!current || !busy(current.status)) { loadHistory(); loadDocs(); return; }
+  pollTimer = setTimeout(async () => { try { show(await api(`/investigations/${current.id}`)); } catch {} poll(); }, 1000);
+}
+function ledgerMap() { return Object.fromEntries((current?.ledger || []).map((e) => [e.id, e])); }
+function citeChip(id) { return el("span", { class: "cite", text: id, onclick: () => { const e = ledgerMap()[id]; if (e) openSource(e); } }); }
+
+const TAG = { search: ["Search", "b-info"], get_metadata: ["Metadata", "b-mute"], process_document: ["Document", "b-warn"], ask_user: ["Ask you", "b-info"], finalize: ["Conclude", "b-llm"] };
+function stepTag(s) {
+  if (!s.action) return badge("ERROR");
+  if (s.action.type === "process_document" && /^Scanning/.test(s.label || "")) return el("span", { class: "badge b-warn", text: "OCR" });
+  const [t, c] = TAG[s.action.type] || [s.action.type, "b-mute"];
+  return el("span", { class: "badge " + c, text: t });
+}
+function activityCard(inv) {
+  const running = busy(inv.status);
+  const items = inv.steps.map((s) => {
+    const o = s.observation, a = s.action;
+    const parts = [];
+    if (s.wait_ms) parts.push(`waited ${secs(s.wait_ms)}`);
+    if (s.llm_ms != null) parts.push(`model ${secs(s.llm_ms)}`);
+    if (s.tokens_out != null) parts.push(`${(s.tokens_in / 1000).toFixed(1)}k in / ${s.tokens_out} out tokens`);
+    if (s.tool_ms != null && a && a.type !== "finalize") parts.push(`tool ${secs(s.tool_ms)}`);
+    if (s.model && PRIMARY && s.model !== PRIMARY) parts.push(`via ${s.model}`);
+    const label = s.label || (a ? a.type : "Planner failed");
+    return el("li", {},
+      el("span", { class: "dot " + (o ? o.status : (a && a.type === "finalize" ? "PLAN" : "ERROR")) }),
+      el("div", {},
+        el("div", { class: "row what" }, stepTag(s), el("span", { text: label }), s.auto ? el("span", { class: "meta", text: "automatic" }) : null, o && o.status !== "OK" ? badge(o.status) : null),
+        o ? el("div", { class: "detail", text: o.summary || o.error || "" }) : null,
+        a && a.reason && !s.auto ? el("div", { class: "detail", text: "why: " + a.reason }) : null,
+        o && o.evidence_ids.length ? el("div", { class: "row detail" }, "found:", ...o.evidence_ids.slice(0, 12).map(citeChip), o.evidence_ids.length > 12 ? `+${o.evidence_ids.length - 12}` : null) : null,
+        ...s.notes.map((n) => el("div", { class: "note", text: "⚠ " + n }))),
+      el("div", { class: "dur", text: parts.join(" · ") }));
+  });
+  if (running) {
+    const act = inv.activity || { text: inv.steps.length ? "Working…" : "Starting…", kind: "work" };
+    const kindTag = { llm: ["Thinking", "b-llm"], wait: ["Rate limit", "b-warn"], warn: ["Retrying", "b-warn"], work: ["Working", "b-info"] }[act.kind] || ["Working", "b-info"];
+    const since = act.since ? Math.max(0, Date.now() / 1000 - act.since) : 0;
+    const now = el("div", { class: "now" }, el("span", { class: "spinner" }), el("span", { class: "badge " + kindTag[1], text: kindTag[0] }),
+      el("span", { text: act.text }), el("span", { class: "elapsed", id: "elapsed", "data-since": act.since || "", text: since ? `${since.toFixed(0)} s` : "" }));
+    return el("div", { class: "card" }, el("h2", { style: "margin-top:0", text: "Investigation in progress" }), now,
+      items.length ? el("ul", { class: "timeline" }, ...items) : null);
+  }
+  const t = inv.timings || {};
+  const llmCalls = inv.steps.filter((s) => s.llm_ms != null || s.planner_ok === false).length;
+  const waited = inv.steps.reduce((x, s) => x + (s.wait_ms || 0), 0);
+  const summary = el("div", { class: "summary" },
+    t.total_ms != null ? el("span", {}, "took ", el("b", { text: secs(t.total_ms) })) : null,
+    el("span", {}, el("b", { text: String(inv.steps.length) }), " steps"),
+    el("span", {}, el("b", { text: String(llmCalls) }), " planning calls"),
+    waited ? el("span", {}, el("b", { text: secs(waited) }), " waiting for rate limits") : null,
+    el("span", {}, el("b", { text: String(inv.ledger.length) }), " pieces of evidence"));
+  return el("details", { class: "card" },
+    el("summary", {}, el("div", { class: "row" }, el("span", { class: "chev", text: "▸" }), el("strong", { text: "How the agent investigated" }), summary)),
+    items.length ? el("ul", { class: "timeline", style: "margin-top:10px" }, ...items) : el("div", { class: "meta", text: "No steps." }));
+}
+
+function show(inv) {
+  current = inv;
+  const head = el("div", { class: "card" },
+    el("div", { class: "question", text: inv.question }),
+    el("div", { class: "row" }, badge(inv.status), inv.outcome ? badge(inv.outcome) : null, el("span", { class: "mono meta", text: inv.id })));
+  const blocks = [head];
+  for (const u of uploads[inv.id] || [])
+    blocks.push(el("div", { class: "card", style: "padding:8px 14px" },
+      el("span", { class: "meta", text: "Upload " }), el("span", { class: "mono", text: u.doc_id + " " }),
+      badge(u.duplicate ? "DUPLICATE" : u.status),
+      el("span", { class: "meta", text: u.duplicate ? " already known (same content) - not processed again"
+        : ` · OCR needed on page(s): ${u.ocr_pages.length ? u.ocr_pages.join(", ") : "none (text layer used)"}` })));
+  blocks.push(activityCard(inv));
+  if (inv.status === "NEEDS_INPUT") blocks.push(replyCard(inv));
+  if (inv.status === "INTERRUPTED" || inv.status === "FAILED") blocks.push(replyCard(inv, true));
+  if (inv.error) blocks.push(el("div", { class: "card err", text: inv.error }));
+  if (!busy(inv.status)) {
+    blocks.push(el("div", { class: "tabs" },
+      ...[["answer", "Answer & sources"], ["subq", `Sub-questions (${inv.sub_questions.length})`], ["ledger", `Evidence (${inv.ledger.length})`]]
+        .map(([k, label]) => el("button", { class: tab === k ? "on" : "", text: label, onclick: () => { tab = k; show(current); } }))));
+    blocks.push(({ answer: answerView, subq: subqView, ledger: ledgerView })[tab](inv));
+  }
+  $("main").replaceChildren(...blocks);
+  document.querySelectorAll("#history li").forEach((li) => li.classList.toggle("active", li.querySelector(".q")?.textContent === inv.question));
+}
+clearInterval(tick);
+tick = setInterval(() => { const e = $("elapsed"); if (e && e.dataset.since) e.textContent = `${Math.max(0, Date.now() / 1000 - Number(e.dataset.since)).toFixed(0)} s`; }, 500);
+
+function replyCard(inv, resume = false) {
+  const msg = el("input", { type: "text", placeholder: resume ? "Optional message, then resume" : "Type an answer (optional if you upload a file)" });
+  const file = el("input", { type: "file" });
+  const err = el("div", { class: "err" });
+  const btn = el("button", { text: resume ? "Resume" : "Send & continue" });
+  btn.onclick = async () => {
+    const fd = new FormData(); fd.append("wait", "false");
+    if (msg.value.trim()) fd.append("message", msg.value.trim());
+    if (file.files[0]) fd.append("file", file.files[0]);
+    btn.disabled = true; err.textContent = "";
+    try { const r = await api(`/investigations/${inv.id}/continue`, { method: "POST", body: fd }); noteUpload(r); show(r); poll(); }
+    catch (e) { err.textContent = e.message; btn.disabled = false; }
+  };
+  return el("div", { class: "card pending" },
+    el("div", { class: "row" }, badge(resume ? inv.status : "NEEDS_INPUT"), el("strong", { text: resume ? "This investigation stopped before finishing." : "The agent needs something from you" })),
+    resume ? null : el("p", { text: inv.pending_question || "" }),
+    el("div", { style: "margin-top:8px" }, msg), el("div", { style: "margin:8px 0" }, file), el("div", {}, btn), err);
+}
+
+function answerView(inv) {
+  const a = inv.answer;
+  if (!a) return el("div", { class: "card empty", text: inv.status === "NEEDS_INPUT" ? "Waiting for your input." : "No final answer yet." });
+  const out = [el("div", { class: "card" }, el("div", { class: "row", style: "margin-bottom:8px" }, badge(a.outcome)), renderAnswer(a.answer))];
+  if (a.caveats.length) out.push(el("div", { class: "card" }, el("h2", { style: "margin-top:0", text: "Caveats" }), el("ul", { class: "plain" }, ...a.caveats.map((c) => el("li", { text: c })))));
+  out.push(el("div", { class: "card" }, el("h2", { style: "margin-top:0", text: `Sources (${a.citations.length}) · click to verify` }),
+    a.citations.length ? el("div", { class: "cites" }, ...a.citations.map((c) => el("div", { class: "citecard", onclick: () => openSource(ledgerMap()[c.evidence_id] || c) },
+      el("div", { class: "row" }, el("span", { class: "cite", text: c.evidence_id }), badge(c.verification)),
+      el("div", { style: "margin-top:6px;font-weight:600", text: c.doc_name }),
+      el("div", { class: "meta mono", text: c.page ? `page ${c.page}` : "document metadata" }),
+      el("div", { class: "ex", text: c.excerpt })))) : el("div", { class: "meta", text: "No sources were cited." })));
+  out.push(el("div", { class: "card" }, el("h2", { style: "margin-top:0", text: "Why this outcome" }), el("ul", { class: "plain" }, ...a.reasons.map((r) => el("li", { text: r }))),
+    a.unresolved.length ? el("div", {}, el("h2", { text: "Unresolved" }), el("ul", { class: "plain" }, ...a.unresolved.map((r) => el("li", { text: r })))) : null));
+  return el("div", {}, ...out);
+}
+
+// Minimal, safe Markdown: [e#] citation chips, **bold**, and pipe tables. Built with DOM nodes, never innerHTML.
+const CITE_RE = /(\[\s*e\d+\s*\]|【\s*e\d+\s*】)/g;
+function inline(text) {
+  const out = [];
+  text.split(CITE_RE).forEach((part) => {
+    if (!part) return;
+    const m = part.match(/^(?:\[|【)\s*(e\d+)\s*(?:\]|】)$/);
+    if (m) { out.push(citeChip(m[1])); return; }
+    part.split(/(\*\*[^*]+\*\*)/g).forEach((p) => {
+      if (/^\*\*[^*]+\*\*$/.test(p)) out.push(el("b", { text: p.slice(2, -2) })); else if (p) out.push(p);
+    });
+  });
+  return out;
+}
+function renderAnswer(md) {
+  const box = el("div", { class: "answer" });
+  const lines = md.split("\n");
+  let i = 0, para = [];
+  const flush = () => { if (para.length) { box.append(el("div", {}, ...inline(para.join("\n")))); para = []; } };
+  while (i < lines.length) {
+    if (/^\s*\|.*\|\s*$/.test(lines[i])) {
+      flush();
+      const rows = [];
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(lines[i]); i++; }
+      const cells = (r) => r.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+      const body = rows.filter((r) => !/^\s*\|[\s:|-]+\|\s*$/.test(r)).map(cells);
+      const [head, ...rest] = body;
+      box.append(el("table", { class: "mdtable" }, el("thead", {}, el("tr", {}, ...head.map((c) => el("th", {}, ...inline(c))))),
+        el("tbody", {}, ...rest.map((r) => el("tr", {}, ...r.map((c) => el("td", {}, ...inline(c))))))));
+      continue;
+    }
+    para.push(lines[i]); i++;
+  }
+  flush();
+  return box;
+}
+
+function subqView(inv) {
+  if (!inv.sub_questions.length) return el("div", { class: "card empty", text: "The planner did not decompose the question." });
+  return el("div", { class: "card" }, el("table", {},
+    el("thead", {}, el("tr", {}, el("th", { text: "#" }), el("th", { text: "Sub-question" }), el("th", { text: "Status" }), el("th", { text: "Evidence" }))),
+    el("tbody", {}, ...inv.sub_questions.map((q) => el("tr", {},
+      el("td", { class: "mono", text: q.id }),
+      el("td", {}, el("div", { text: q.text }), q.note ? el("div", { class: "meta", text: q.note }) : null),
+      el("td", {}, badge(q.status)),
+      el("td", {}, ...q.evidence_ids.map(citeChip)))))));
+}
+
+function ledgerView(inv) {
+  if (!inv.ledger.length) return el("div", { class: "card empty", text: "No evidence collected." });
+  return el("div", { class: "card" }, el("table", {},
+    el("thead", {}, el("tr", {}, ...["id", "kind", "source", "verification", "scores", "text"].map((h) => el("th", { text: h })))),
+    el("tbody", {}, ...inv.ledger.map((e) => el("tr", {},
+      el("td", {}, citeChip(e.id)), el("td", { text: e.kind }),
+      el("td", {}, el("div", { text: e.doc_name }), el("div", { class: "meta mono", text: e.page ? "p." + e.page : "" })),
+      el("td", {}, badge(e.verification), e.ocr_confidence != null ? el("div", { class: "meta", text: "OCR " + Math.round(e.ocr_confidence) }) : null),
+      el("td", { class: "meta mono", text: e.rerank_score != null ? "rerank " + e.rerank_score : "" }),
+      el("td", { class: "meta", text: e.text.length > 220 ? e.text.slice(0, 220) + "…" : e.text }))))));
+}
+
+// ------------------------------------------------------------------ source viewer
+const norm = (w) => w.replace(/\[\[\?|\]\]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+function citedTokens(entry) {
+  if (!entry.text) return [];
+  let t = entry.text;
+  const m = t.match(/source: '([^']*)'/) || t.match(/source: "([^"]*)"/);
+  if (entry.kind === "field" && m) t = m[1];
+  if (entry.kind === "metadata") return [];
+  return t.split(/\s+/).map(norm).filter(Boolean);
+}
+function renderPage(p, threshold, cite) {
+  const tokens = [];
+  const lines = p.text.split("\n");
+  let wi = 0;
+  lines.forEach((line, li) => {
+    line.split(/(\s+)/).forEach((piece) => {
+      if (!piece) return;
+      if (/^\s+$/.test(piece)) { tokens.push({ space: piece }); return; }
+      let conf = null;
+      if (p.method === "ocr" && wi < p.words.length && p.words[wi][0] === piece) conf = p.words[wi][1];
+      if (p.method === "ocr") wi++;
+      tokens.push({ word: piece, conf });
+    });
+    if (li < lines.length - 1) tokens.push({ space: "\n" });
+  });
+  // locate the cited span (first matching window of the cited tokens)
+  const words = tokens.map((t, i) => ({ i, n: t.word ? norm(t.word) : null })).filter((x) => x.n);
+  let hit = new Set();
+  if (cite.length) {
+    const probe = cite.slice(0, Math.min(6, cite.length));
+    for (let s = 0; s + probe.length <= words.length; s++) {
+      if (probe.every((w, k) => words[s + k].n === w)) { for (let k = 0; k < Math.min(cite.length, words.length - s); k++) hit.add(words[s + k].i); break; }
+    }
+  }
+  const box = el("div", { class: "pagetext" });
+  tokens.forEach((t, i) => {
+    if (t.space) { box.append(t.space); return; }
+    const cls = [hit.has(i) ? "hl" : "", t.conf != null && t.conf < threshold ? "low" : ""].join(" ").trim();
+    box.append(cls ? el("span", { class: cls, title: t.conf != null ? `OCR confidence ${Math.round(t.conf)}` : "", text: t.word }) : t.word);
+  });
+  return { box, found: hit.size > 0 };
+}
+
+async function openSource(entry) {
+  $("drawer").classList.add("open");
+  if (entry.kind === "user" || entry.doc_id === "user") {
+    $("drawerTitle").replaceChildren(el("div", { style: "font-weight:600", text: "Your reply" }), el("div", { class: "row meta" }, entry.id ? citeChip(entry.id) : null, badge("USER_STATED")));
+    $("drawerBody").replaceChildren(el("h2", { text: "What you told the agent" }), el("div", { class: "cited", text: entry.text || entry.excerpt || "" }),
+      el("p", { class: "meta", text: "Information you provide is used as given. It is not confirmed by any document, so answers that depend on it are marked with a caveat." }));
+    return;
+  }
+  $("drawerTitle").replaceChildren(el("div", { style: "font-weight:600", text: entry.doc_name || entry.doc_id }),
+    el("div", { class: "row meta" }, entry.id ? citeChip(entry.id) : null, entry.page ? `page ${entry.page}` : "", entry.verification ? badge(entry.verification) : null,
+      entry.ocr_confidence != null ? `OCR confidence ${Math.round(entry.ocr_confidence)}` : "", entry.rerank_score != null ? `rerank ${entry.rerank_score}` : ""));
+  const body = $("drawerBody");
+  body.replaceChildren(el("div", { class: "meta" }, el("span", { class: "spinner" }), " loading…"));
+  let doc;
+  try { doc = await api(`/documents/${entry.doc_id}/pages`); } catch (e) { body.replaceChildren(el("div", { class: "err", text: e.message })); return; }
+  const kids = [];
+  if (entry.text) kids.push(el("h2", { text: "What the agent cited" }), el("div", { class: "cited", text: entry.text.replace(/\[\[\?(.*?)\]\]/g, "$1⚠") }));
+  const page = entry.page ? doc.pages.find((p) => p.page === entry.page) : null;
+  const pages = page ? [page] : doc.pages;
+  kids.push(el("h2", { text: page ? `Extracted text of page ${page.page} (${page.method === "ocr" ? "OCR" : "native text layer"})` : "Extracted text" }),
+    el("div", { class: "legend" }, el("span", { class: "", style: "background:var(--hl)", text: "cited span" }), " ",
+      el("span", { style: "background:var(--lowconf)", text: `OCR confidence < ${doc.ocr_threshold}` }), " — hover a word to see its confidence"));
+  if (!pages.length) kids.push(el("div", { class: "meta", text: `No extracted text yet (document status: ${doc.status}).` }));
+  const cite = citedTokens(entry);
+  pages.forEach((p) => {
+    const r = renderPage(p, doc.ocr_threshold, cite);
+    if (!page) kids.push(el("div", { class: "meta", text: `page ${p.page} · ${p.method}` }));
+    kids.push(r.box);
+    if (page && cite.length && !r.found) kids.push(el("div", { class: "note", text: "The cited text could not be located exactly on this page. Compare it with the original below." }));
+  });
+  const fileUrl = `/documents/${entry.doc_id}/file${entry.page && doc.mime === "application/pdf" ? "#page=" + entry.page : ""}`;
+  kids.push(el("h2", {}, "Original document ", el("a", { href: fileUrl, target: "_blank", text: "open in new tab ↗" })));
+  kids.push(doc.mime.startsWith("image/") ? el("img", { class: "imgview", src: fileUrl, alt: doc.title }) : el("iframe", { src: fileUrl, title: doc.title }));
+  body.replaceChildren(...kids);
+}
+$("drawerClose").onclick = () => $("drawer").classList.remove("open");
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("drawer").classList.remove("open"); });
+
+loadHealth(); loadHistory(); loadDocs();
+const fromHash = location.hash.slice(1);
+if (fromHash) openInv(fromHash); else $("newQ").focus();
+</script>
+</body>
+</html>

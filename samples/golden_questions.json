@@ -1,0 +1,28 @@
+{
+  "_comment": "Retrieval test set. 'expect' lists acceptable (document title fragment, section prefix) pairs; empty = the documents do not answer it.",
+  "questions": [
+    {"q": "What all is covered under the warranty?", "expect": [["Limited Warranty Policy", "3. What is covered"]]},
+    {"q": "What does the warranty not cover?", "expect": [["Limited Warranty Policy", "4. Exclusions"]]},
+    {"q": "How do I make a warranty claim?", "expect": [["Limited Warranty Policy", "7. Claims procedure"]]},
+    {"q": "How long does a warranty claim take to process?", "expect": [["Limited Warranty Policy", "7. Claims procedure"], ["Limited Warranty Policy", "12. Key time limits"]]},
+    {"q": "till when can i claim my warranty?", "expect": [["Limited Warranty Policy", "12. Key time limits"], ["Limited Warranty Policy", "2. Warranty period"], ["Limited Warranty Policy", "7. Claims procedure"]]},
+    {"q": "what are the usual time periods when i can claim my warranty?", "expect": [["Limited Warranty Policy", "12. Key time limits"], ["Limited Warranty Policy", "7. Claims procedure"], ["Limited Warranty Policy", "2. Warranty period"]]},
+    {"q": "what is the max flow rating for industrial pump?", "expect": [["X200 Service Manual", "1. Specifications"]]},
+    {"q": "what are the specifications for industrial pump?", "expect": [["X200 Service Manual", "1. Specifications"]]},
+    {"q": "What is the warranty period for a commercial unit bought in 2025?", "expect": [["Amendment", "1. Commercial-use units"], ["Amendment", "7. Summary"]]},
+    {"q": "Is labour covered for commercial pumps?", "expect": [["Amendment", "4. Labour costs"], ["Amendment", "7. Summary"]]},
+    {"q": "Can I transfer the warranty to a new owner?", "expect": [["Limited Warranty Policy", "9. Transfer"]]},
+    {"q": "How often should the mechanical seal be replaced on the X200?", "expect": [["X200 Service Manual", "4. Maintenance schedule"], ["X200 Service Manual", "1. Specifications"]]},
+    {"q": "What does error code E03 mean?", "expect": [["X200 Service Manual", "6. Error codes"]]},
+    {"q": "Are leased pumps covered by the warranty?", "expect": [["Limited Warranty Policy", "1. Scope"]]},
+    {"q": "What fluids can I use in the X200?", "expect": [["X200 Service Manual", "3. Approved fluids"], ["Limited Warranty Policy", "4. Exclusions"]]},
+    {"q": "What is the X300 Extended Care programme?", "expect": [["X300 Service Manual", "9. Warranty"]]},
+    {"q": "Is motor seizure a failure or normal wear?", "expect": [["X200 Service Manual", "5. Failure versus normal wear"], ["X300 Service Manual", "7. Failure versus normal wear"]]},
+    {"q": "Who has to install the X200?", "expect": [["X200 Service Manual", "2. Installation requirements"], ["Limited Warranty Policy", "5. Conditions"]]},
+    {"q": "What happens if my claim is rejected?", "expect": [["Limited Warranty Policy", "8. Disputes"]]},
+    {"q": "Does the amendment change the warranty period for residential pumps?", "expect": [["Amendment", "2. Residential-use units"], ["Amendment", "7. Summary"]]},
+    {"q": "How many days are in January?", "expect": []},
+    {"q": "What is the capital of France?", "expect": []},
+    {"q": "Which football team won the league last year?", "expect": []}
+  ]
+}

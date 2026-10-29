@@ -1,0 +1,42 @@
+[
+  {
+    "file": "warranty_policy_v1.pdf",
+    "title": "Aquaflow Limited Warranty Policy v1.0 (AQF-WP-1.0)",
+    "doc_type": "policy",
+    "product": "X-series",
+    "effective_date": "2023-01-01",
+    "supersedes": null
+  },
+  {
+    "file": "warranty_amendment_2025.pdf",
+    "title": "Warranty Policy Amendment No. 1 (AQF-WP-1.0-A1)",
+    "doc_type": "amendment",
+    "product": "X-series",
+    "effective_date": "2025-01-01",
+    "supersedes": "AQF-WP-1.0 section 2, for units purchased on or after 2025-01-01"
+  },
+  {
+    "file": "service_manual_x200.pdf",
+    "title": "Aquaflow X200 Service Manual (AQF-SM-X200)",
+    "doc_type": "manual",
+    "product": "X200",
+    "effective_date": null,
+    "supersedes": null
+  },
+  {
+    "file": "customer_contract_acme.pdf",
+    "title": "Acme Facilities equipment lease (ACME-LEASE-2025-014)",
+    "doc_type": "contract",
+    "product": "X200",
+    "effective_date": "2025-03-01",
+    "supersedes": null
+  },
+  {
+    "file": "service_manual_x300.pdf",
+    "title": "Aquaflow X300 Service Manual (AQF-SM-X300)",
+    "doc_type": "manual",
+    "product": "X300",
+    "effective_date": null,
+    "supersedes": null
+  }
+]
