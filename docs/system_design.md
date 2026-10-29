@@ -1,160 +1,164 @@
 # System design
 
-## 1. What it does
+## 1. Purpose and core idea
 
-An investigation agent answers a question by deciding, step by step, which evidence it still needs and how to get it: hybrid search over indexed chunks, metadata lookups in SQLite, or OCR and extraction on a document the user uploads mid-investigation. It ends with either a cited answer or an explicit, typed reason why a reliable answer is not possible yet.
+The system answers questions about a document collection by **investigating**: it decides step by step what
+evidence it still needs, gets it (search, metadata, OCR of an uploaded document, or a question to the user), and
+finishes with either a **cited answer** or an **explicit reason** why a reliable answer is not possible.
 
-The core principle: **the LLM proposes, code decides.** The model plans and labels evidence; deterministic guards validate every claim against an evidence ledger and decide the final outcome.
+One principle shapes the design: **the LLM proposes, code decides.** The model plans the next step and labels
+evidence; deterministic code checks every claim against the evidence actually collected, checks OCR confidence word
+by word, and decides the final outcome. A model mistake therefore leads to a refusal or a caveat, not a wrong
+answer presented as fact.
 
 ## 2. Architecture
 
 ```mermaid
-flowchart TB
-    subgraph API["FastAPI (stateless)"]
-        A1["POST /investigations"]
-        A2["POST /investigations/{id}/continue"]
-        A3["GET /investigations/{id}"]
-        A4["POST /documents · /resume · /promote"]
-    end
-
-    subgraph Agent["Investigation loop (app/agent)"]
-        P["Planner<br/>1 LLM call per step:<br/>sub-question statuses + next action"]
-        G["Guards (code)<br/>validate statuses vs ledger<br/>repeat / budget / failure limits"]
-        L[("Evidence ledger<br/>e1, e2 ...")]
-        O["Outcome decision (code)"]
-        C["Composer (LLM) + citation verifier (code)<br/>refusals composed in code"]
-    end
-
-    subgraph Tools["Tool registry (app/tools)<br/>arg validation · retry with backoff · typed Observation"]
-        T1[search]
-        T2[get_metadata]
-        T3[process_document]
-        T4[ask_user]
-    end
-
-    subgraph Retrieval["Retrieval (app/retrieval)"]
-        R1["BM25 (ES)"] --> RF["RRF fusion (Python)"]
-        R2["kNN (ES) ← BGE-small embeddings"] --> RF
-        RF --> RR["BGE reranker → top-k"]
-    end
-
-    subgraph Ingestion["Ingestion state machine (app/ingestion)"]
-        I0["register: SHA-256 dedupe, store"] --> I1["TRIAGED: text layer per page?"]
-        I1 --> I2["EXTRACTED: native text or Tesseract OCR<br/>(per-word confidence, per-page resumable)"]
-        I2 --> I3["CHUNKED: page-aware, deterministic ids"]
-        I3 --> I4["INDEXED: embed + upsert"]
-        I2 -.extract_only.-> X["Field extractor (LLM)<br/>+ grounding & OCR-confidence check (code)"]
-    end
-
-    LLM[["Claude Sonnet 5.5"]]
-    ES[("Elasticsearch")]
-    DB[("SQLite<br/>documents · pages · chunks · investigations")]
-    FS[("uploads/")]
-
-    API --> Agent
-    P <--> LLM
-    P --> G --> Tools
-    Tools --> L --> P
-    G --> O --> C
-    C <--> LLM
-    T1 --> Retrieval --> ES
-    T2 --> DB
-    T3 --> Ingestion
-    X <--> LLM
-    I4 --> ES
-    Ingestion --> DB
-    I0 --> FS
-    Agent -- "state saved after every step" --> DB
+flowchart LR
+    U["User<br/>web UI or REST API"] --> API["FastAPI"]
+    API --> LOOP["Investigation loop"]
+    LOOP <--> LLM["Planner LLM<br/>gpt-oss:20b in Ollama"]
+    LOOP --> G["Guards and outcome rules<br/>(code)"]
+    LOOP --> T["Tool registry"]
+    T --> S["search"] --> R["Hybrid retrieval<br/>BM25 + kNN + reranker"] --> ES[("Elasticsearch<br/>chunks")]
+    T --> M["get_metadata"] --> DB[("SQLite<br/>documents, pages,<br/>investigations")]
+    T --> P["process_document"] --> I["Ingestion<br/>triage, OCR, chunk, embed"]
+    I --> OCR["Tesseract"]
+    I --> ES
+    I --> DB
+    T --> A["ask_user"] -.-> U
+    LOOP -- "state saved after every step" --> DB
 ```
 
-## 3. The investigation loop
-
-1. **Plan.** The planner sees the question, sub-questions, the ledger (with rerank scores, OCR confidence and verification flags), attachments, history and system notes. It returns updated sub-questions (each `OPEN | SUPPORTED | MISSING | CONFLICTING | UNVERIFIED | INSUFFICIENT` with ledger ids) and one action. Output is schema-validated; one repair re-prompt on failure; then a safe fallback (finalize).
-2. **Validate.** Code checks each claimed status: unknown ids are dropped; `SUPPORTED` needs verified evidence above the relevance floor or is downgraded to `UNVERIFIED`/`INSUFFICIENT`; `CONFLICTING` needs both sides.
-3. **Guard.** Identical successful calls are blocked (normalized `(tool, args)` hash); a failing call may be retried once by the planner; step, repeat and consecutive-failure budgets force finalization.
-4. **Act.** The tool registry validates arguments (bad args are an output problem, not a backend failure), retries transient errors with exponential backoff, and always returns a typed `Observation` (`OK`, `EMPTY`, `ERROR`, `BLOCKED`, `PAUSED`).
-5. **Record.** Evidence goes into the ledger (deduplicated); the state is persisted.
-6. **Pause or finish.** `ask_user` pauses (`NEEDS_INPUT`). At finalize, code decides the outcome; only answerable outcomes call the composer, whose citations are verified against the ledger.
-
-### Distinguishing failure modes
-
-| Situation | How it is detected | Outcome |
+| Component | Responsibility | Code |
 |---|---|---|
-| Missing information | Planner marks `MISSING` (not in resources, user could supply) | `ask_user` pause, or `MISSING_INFO` |
-| Tool failure | `Observation.status = ERROR` after retries; tracked per tool until a later success | `TOOL_FAILURE` (explicitly "not evidence of absence") |
-| Insufficient evidence | Searched successfully but evidence weak / off-topic / below rerank floor | `INSUFFICIENT_EVIDENCE` |
-| Contradictory evidence | `CONFLICTING` with both sides cited; agent consults metadata (effective date, supersedes) to resolve | resolved → normal outcome; unresolved → `CONFLICT` |
-| Uncertain OCR | Field or chunk flagged `UNVERIFIED` by code | `ANSWERED_WITH_CAVEATS` only if the verdict is robust; else `INSUFFICIENT_EVIDENCE` |
+| FastAPI | Start / continue / inspect investigations, upload documents, serve the UI | `app/api/`, `app/main.py` |
+| Investigation loop | Runs plan → validate → act → record until finished | `app/agent/loop.py` |
+| Planner | One LLM call per step: updated sub-questions + one next action, as schema-constrained JSON | `app/agent/planner.py` |
+| Guards | Validate the planner's claims, block repeats, enforce budgets, review the answer, decide the outcome | `app/agent/guards.py` |
+| Evidence ledger | Every piece of evidence with an id (`e1`, `e2` ...), source, page and verification flag | `app/agent/ledger.py` |
+| Tools | `search`, `get_metadata`, `process_document`, `ask_user`; argument validation, retries, typed results | `app/tools/` |
+| Retrieval | Elasticsearch BM25 + kNN (BGE-small embeddings), fused with a BGE reranker | `app/retrieval/` |
+| Ingestion | Per-page text-layer check, Tesseract OCR with per-word confidence, chunking, embedding, indexing | `app/ingestion/` |
+| LLM client | Ollama native API: JSON schema as output grammar, low reasoning effort, 16k context | `app/llm/ollama.py` |
 
-### Misleading retrieval
+## 3. How an investigation runs
 
-The corpus contains a decoy (X300 manual, a 36-month programme). It scores well on "warranty" queries. Three things stop it from leaking into an answer: the planner is instructed that other-model evidence supports nothing and re-queries with a `product` filter; sub-questions must cite specific ids, so an answer cannot quietly rely on it; and the reranker floor stops weak chunks from supporting anything.
+1. **Automatic first steps (no LLM).** Search the question; read any attached document; if a retrieved document has
+   an amendment, search that too. The planner starts with evidence already in the ledger.
+2. **Plan.** The LLM splits the question into sub-questions, each with a status (`SUPPORTED`, `MISSING`,
+   `CONFLICTING`, `UNVERIFIED`, `INSUFFICIENT`, `OPEN`) and the evidence ids behind it, and picks one action.
+3. **Validate (code).** Unknown evidence ids are dropped; `SUPPORTED` needs relevant, verified evidence; a claim on a
+   scanned page is accepted only if the words it rests on were read with high confidence.
+4. **Act.** The chosen tool runs; its result is added to the ledger; the state is saved.
+5. **Repeat** until the planner finalizes, asks the user (the run pauses with `NEEDS_INPUT`), or a budget is reached
+   (12 steps, repeated or failing calls).
+6. **Finish (code).** The answer is reviewed (section 6), the outcome is decided from the validated statuses, and
+   citations are checked against the ledger. Refusals are written by code, not by the model.
 
-### Latency design
+A simple question typically takes one LLM call; the main warranty question takes a few, plus one pause for the
+receipt.
 
-- **Fast path:** before the first LLM call the loop runs a hybrid search on the question itself (an obvious first step that needs no model). The planner therefore starts with evidence and, for simple or broad questions, finalizes in its first call and writes the answer in the same call. A simple question costs one LLM call; the composer is only used when the planner did not write an answer.
-- **No repair round-trips:** the Ollama client sends the JSON schema as `format`, so decoding is constrained to it (structured output that always parses). The schema is transformed automatically (closed objects, optional fields nullable, free-form `args` encoded as a JSON string) and decoded back.
-- **Lean prompts:** compact JSON, uncited older evidence abbreviated, a short system prompt.
-- **Pacing instead of 429 storms:** the client reads `x-ratelimit-*` headers and waits for the token window before sending.
-- **Measured, not guessed:** every step records model, tool and rate-limit wait times; the UI shows them.
-- **Fail fast:** a rate-limit wait longer than `LLM_MAX_WAIT_S` (e.g. a daily quota) is reported at once with the time until it frees up; Elasticsearch has a circuit breaker, and a run whose first search fails with nothing else to work from stops before any LLM call.
-- **Deterministic first steps:** attachments are indexed and searched, and amendments of retrieved documents (per `supersedes` metadata) are searched, before the first planner call.
+## 4. Outcomes
 
-### Answer review
+| Outcome | Meaning | Decided by |
+|---|---|---|
+| `ANSWERED` | Every required part is supported by verified, cited evidence | All required sub-questions `SUPPORTED` |
+| `ANSWERED_WITH_CAVEATS` | Answered; what is missing or relies on the user's own statement is stated | Some optional/unfound parts, or user-stated facts |
+| `MISSING_INFO` | A needed fact is in no document but the user could supply it (asked once) | A required sub-question `MISSING` |
+| `INSUFFICIENT_EVIDENCE` | Evidence is weak, uncertain or off-topic, or the question is outside the documents | Unverified decisive OCR, unknown model, nothing relevant retrieved |
+| `CONFLICT` | Sources disagree and nothing (e.g. versioning) resolves it | A `CONFLICTING` sub-question citing both sides |
+| `TOOL_FAILURE` | A component failed - not evidence that the answer is unavailable | A tool still failing after retries |
 
-Before an answer is accepted, code checks it: every date it states must appear in the evidence, the question or the user's replies, or follow from one of them by a period the sources name (purchase date + 12 months); and no document it relies on may have an unconsulted amendment. A failing answer is sent back to the planner with the specific problem (at most twice); a problem that survives becomes a caveat and the outcome cannot be ANSWERED.
+## 5. Retrieval
 
-### Live progress
+- **Chunking:** pages are split at section headings (carried across page breaks), long sections into ~220-word
+  windows; each chunk keeps document, page and section, with a deterministic id `doc:page:index`.
+- **Hybrid search:** BM25 (text, section, title) and kNN on `bge-small-en-v1.5` embeddings, 20 candidates each.
+- **Ranking:** `bge-reranker-base` scores the candidates; BM25, kNN and reranker rankings are combined by reciprocal
+  rank fusion. A passage counts as relevant if the reranker scores it ≥ 0.03 or it is in the fused top 3.
+- **Versions:** document metadata in SQLite records what supersedes what; when a policy is retrieved, its amendment
+  is fetched as well, so "24 months vs 12 months" is resolved rather than guessed.
+- **Out of scope:** if the best reranker score of everything retrieved is below 0.008, nothing relates to the
+  question; the agent does not ask the user and the outcome is `INSUFFICIENT_EVIDENCE`.
+- **Measured:** 42 held-out questions (never used for tuning) measure recall and MRR per question type
+  (`scripts/eval_retrieval.py`).
 
-The loop sets a per-investigation reporter (a context variable), so deep code such as the LLM client can report "Waiting for the model's rate limit (21s)" without knowing which investigation it serves. Reports go to an in-process activity board exposed as `activity` on `GET /investigations/{id}`. With several API workers the board would move to Redis (or the investigation would stream server-sent events from the worker that runs it).
+## 6. Trust: OCR and answer checks
 
-### Chunking
+**Documents and OCR**
 
-Pages are split at section headings (numbered headings and schedules, carried across page breaks), then long sections are windowed. Each chunk keeps its page and a `section` label; BM25 searches text, section (boosted) and document title, and embeddings and the reranker see "document - section" plus the text. This keeps a broad question such as "what is covered?" on the right section instead of on whichever fixed-size window happened to contain the words.
+- An upload is registered cheaply (SHA-256 hash, file stored, pages triaged); nothing heavy runs until it is needed.
+- Each page uses its text layer if it has one; only pages without one are OCR'd (Tesseract 5, confidence per word).
+- Ingestion is a resumable state machine: `RECEIVED → TRIAGED → EXTRACTED → CHUNKED → INDEXED`, with per-page OCR
+  progress and a processing lock.
+- **Word-level verification:** a value is `VERIFIED` only if every OCR word that spells it has confidence ≥ 80. A
+  smudged signature elsewhere on the page does not affect a clearly printed "COMMERCIAL"; a smudged digit in the
+  date does make the date `UNVERIFIED`, and an `UNVERIFIED` value that decides the verdict blocks the answer.
+- An upload is visible only to the investigation it is attached to.
 
-## 4. On-demand document intelligence
+**Answer review (before an answer is accepted)**
 
-- **Upload is cheap.** Registration stores the file, dedupes by SHA-256 and triages pages (text layer present?). No OCR, no embedding.
-- **Processing is chosen by the agent.** `process_document` with `extract_only` OCRs only pages without a text layer and asks the LLM for named fields; `index` additionally chunks, embeds and indexes (session or global scope). A receipt is one-off evidence, so `extract_only`; a long report the user will search repeatedly is `index`.
-- **OCR uncertainty is preserved.** Tesseract gives per-word confidence. Low-confidence words are shown to the LLM as `[[?word]]`. Extracted values are re-checked in code: the source text must appear on the page (catches "corrected" values), and the confidences of exactly those words decide `VERIFIED` vs `UNVERIFIED`. Chunks with any low-confidence word are `UNVERIFIED` too.
-- **Visibility.** Session documents are searchable only by their investigation (ES `scope` field plus an attachment filter); `/documents/{id}/promote` makes them global.
-
-## 5. Reliability
-
-| Concern | Mechanism |
+| Risk | Control in code |
 |---|---|
-| Malformed model output | Pydantic validation → one repair prompt with the error → safe fallback; composer falls back to a deterministic, cited answer |
-| Hallucinated citations | Citation verifier keeps only ledger ids; every answered sub-question must be cited; no valid citations → refusal |
-| Tool failures | Typed observations, retries with backoff for transient errors, degraded modes (no reranker → fused order; no embeddings → BM25) |
-| Repeated calls | Normalized call hash; blocked and reported to the planner |
-| Runaway loops | Step budget, repeat budget, consecutive-failure budget |
-| Duplicate uploads | SHA-256 unique index; concurrent identical uploads resolved by the DB constraint |
-| Interrupted ingestion | `status` = last completed stage; idempotent stages; page-level resume inside OCR; atomic `processing` lock; stale locks cleared and pending documents resumed on startup |
-| Interrupted investigations | State saved after every step; `RUNNING` at startup → `INTERRUPTED`; `/continue` resumes; atomic claim prevents two runs at once |
+| Invented or misused dates | Every date must appear in the evidence or follow from an evidence date by a period the documents state; a document's own effective date may not be used to compute a deadline |
+| Outdated rules | An answer may not rely on a document whose amendment was not consulted |
+| Unknown products | Model numbers / serials in the question must appear in some document, otherwise no answer |
+| Made-up citations | Only ledger ids survive; each answered sub-question must be cited |
 
-## 6. Testability
+A failing answer is sent back to the planner with the specific problem (at most twice); if it persists, the answer
+is withheld or downgraded.
 
-Every external dependency sits behind a small protocol: `LLMClient`, `SearchIndex`, `Embedder`, `Reranker`, `OCREngine`. `app/container.py` wires real or fake implementations. Tests use `ScriptedLLM` (outputs can be functions of the exact prompt the real model would see), `InMemoryIndex`, `HashEmbedder`, `OverlapReranker` and `FakeOCR`. The suite covers the end-to-end demo through HTTP, every failure case above, ingestion resume, OCR grounding, retrieval degradation and outcome logic. Real-Tesseract and real-Elasticsearch tests run when those are available.
+## 7. Reliability
 
-## 7. Scaling
+| Failure | Handling |
+|---|---|
+| Malformed model output | Schema-constrained decoding; one repair round with the validation error; prompt-only retry for empty replies; safe finalize |
+| Tool error | Typed results (`OK`, `EMPTY`, `ERROR`, `BLOCKED`, `PAUSED`); retries with backoff for transient errors; bad arguments are not retried |
+| Degraded services | No embeddings → BM25 only; no reranker → fused order; Elasticsearch down → circuit breaker and an immediate `TOOL_FAILURE` |
+| Repeated tool calls | Calls hashed on tool + normalised arguments; identical calls blocked |
+| Runaway loops | Step budget (12), repeat and consecutive-failure budgets |
+| Duplicate uploads | Same bytes (any file name) → same document, not reprocessed |
+| Crash mid-processing | On startup: stale locks cleared, documents resume from their last completed stage (OCR'd pages are not redone), running investigations become `INTERRUPTED` and can be resumed |
 
-**Concurrent users.**
-- The API is stateless; all state is in the database. Run several uvicorn workers or replicas behind a load balancer.
-- Investigations are claimed atomically, so two requests can never run the same one.
-- Move long work off the request path: `POST /investigations` enqueues a job (Celery/RQ/Arq on Redis) and returns `202` with an id; clients poll `GET /investigations/{id}` or receive a webhook/SSE stream. The loop code does not change, because it already resumes from persisted state.
-- OCR and embedding run in separate worker pools (CPU for OCR, GPU for embeddings/reranking), sized independently.
-- Replace SQLite with Postgres (row-level locks for `try_lock` / `claim_investigation` via `SELECT ... FOR UPDATE SKIP LOCKED`). Only `app/db/repo.py` changes.
-- Per-user rate limits and per-investigation token/step budgets bound LLM cost.
+## 8. Data
 
-**Larger collections.**
-- Elasticsearch: shard by tenant or collection, add replicas for read throughput, use int8-quantized `dense_vector` HNSW to cut memory, and keep metadata filters (`doc_type`, `product`, `scope`) as pre-filters for kNN.
-- Bulk ingestion through the same state machine, run by many workers; deterministic chunk ids make retries safe.
-- Uploaded files move from local disk to object storage (S3/Azure Blob); the pipeline only needs a path or URL.
-- Cache query embeddings and reranker results for hot queries; cache LLM extraction per `(doc_id, fields)`.
-- For very large candidate sets, rerank in batches on GPU, or use a smaller reranker for a first pass.
+| Store | Contents |
+|---|---|
+| SQLite (WAL) | `documents` (metadata, hash, scope, processing state), `pages` (text, per-word OCR confidence), `chunks`, `investigations` (full state after every step) |
+| Elasticsearch | Index `chunks`: text, section, document name, page, scope, product, doc type, verification flag, 384-d vector |
+| Disk | Uploaded files (`data/uploads/`) |
 
-## 8. Known limitations
+## 9. Testability
 
-- `robust_to_unverified` is a model judgement; the guard enforces that it must be stated, not that the reasoning is correct. A stricter version would ask the model for candidate readings of each uncertain value and recompute the verdict for each.
-- Word-level OCR confidence is coarse: a smudge on one digit lowers the whole token.
-- The investigation runs synchronously inside the request for this prototype (see §7 for the queued design).
+Each external service sits behind a small interface (LLM, search index, embedder, reranker, OCR), wired in
+`app/container.py`. The 156 tests swap in fakes - including a scripted LLM whose replies can depend on the exact
+prompt the real model would see - so the whole workflow and every failure case run without Elasticsearch, models or
+network. Real Tesseract and Elasticsearch tests run when available (and in CI).
+
+## 10. Scaling
+
+**Concurrent users**
+- The API holds no state; run several workers behind a load balancer. Investigations are claimed atomically, so one
+  can never run twice at the same time.
+- Move investigations to a job queue (e.g. Redis + RQ/Celery): the API returns an id, clients poll or stream
+  progress. The loop already resumes from saved state, so it does not change.
+- Replace SQLite with PostgreSQL (row locks for claims); only `app/db/repo.py` changes.
+- Serve the LLM from a GPU inference server (e.g. vLLM or several Ollama nodes); OCR and embedding run in their own
+  worker pools.
+
+**Larger collections**
+- Shard Elasticsearch by tenant or collection, add replicas, and use quantized vectors to cut memory; keep metadata
+  filters (product, document type, scope) as pre-filters.
+- Ingest in bulk through the same state machine with many workers; deterministic chunk ids make retries safe.
+- Store files in object storage (S3 / Azure Blob) instead of local disk.
+- Replace the corpus list shown to the planner with a metadata search tool once there are hundreds of documents.
+
+## 11. Trade-offs and limitations
+
+- **Local 20B model:** private and free to run, but slower and weaker at planning than large hosted models; the code
+  guards compensate by refusing rather than guessing.
+- **Thresholds** (OCR 80, relevance 0.03, off-topic 0.008) are calibrated on this corpus and should be re-checked on
+  a new one with `scripts/eval_retrieval.py`.
+- **Unknown-entity check** recognises code-like identifiers (X900, AQ-...), not unknown plain names.
+- **Prototype scope:** single node, no authentication, Elasticsearch security disabled.
